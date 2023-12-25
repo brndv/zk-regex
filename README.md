@@ -36,6 +36,7 @@ cargo build --release
 ### Test & Example
 
 ```bash
+cd zk-regex
 cargo test --release test_substr_pass1
 cargo test --release test_substr_fail1
 cargo run --example regex
