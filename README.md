@@ -7,18 +7,14 @@ The regex matching(DFA processing) constraints are implemented in RegexVerifyCon
 
 ### Regex Matching circuit table layout
 
-| CharactersInput
-Advice | States
-Advice | SubStrId
-Advice | MaskedCharacters
-Advice | ValidCharacter
-Lookup | ValidCurrentState
-Lookup | ValidNextState
-Lookup | ValidSubstrId
-Lookup  |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-|  |  |  |  |  |  |  |  |
-|  |  |  |  |  |  |  |  |
+| CharactersInput(Advice) | States(Advice) | SubStrIds(Advice) | MaskedCharacters(Advice) |
+| :---------------------- | :------------- | :---------------- | :----------------------- |
+|  |  |  |  |
+
+
+| ValidCharacter(Lookup) | ValidCurrentState(Lookup) | ValidNextState(Lookup) | ValidSubstrId(Lookup) |
+| :--------------------- | :------------------------ | :--------------------- | :-------------------- |
+|  |  |  |  |
 
 Here is the layout of regex(all string regex and sub-string regex)  matching circuit for a single regex definition from the library (one all string regex comprised of multiple sub-string regex for simplicity). Here **MaskedCharacters[row_idx] should be equal to CharactersInput[row_idx]*SubStrId[row_idx].**
 
