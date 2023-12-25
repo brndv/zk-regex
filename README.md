@@ -5,10 +5,29 @@ This is a library that simplifies circuit building for regex matching. It works 
 The vrm(Variable-regex mapping) here is almost the same as in  [halo2-regex](https://github.com/zkemail/halo2-regex) .
 The regex matching(DFA processing) constraints are implemented in RegexVerifyConfig in zk-regex/src/lib.rs, and corresponding advice assigning is within function match_substrs of RegexVerifyConfig.
 
+### Regex Matching circuit table layout
+
+| CharactersInput
+Advice | States
+Advice | SubStrId
+Advice | MaskedCharacters
+Advice | ValidCharacter
+Lookup | ValidCurrentState
+Lookup | ValidNextState
+Lookup | ValidSubstrId
+Lookup  |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+|  |  |  |  |  |  |  |  |
+|  |  |  |  |  |  |  |  |
+
+Here is the layout of regex(all string regex and sub-string regex)  matching circuit for a single regex definition from the library (one all string regex comprised of multiple sub-string regex for simplicity). Here **MaskedCharacters[row_idx] should be equal to CharactersInput[row_idx]*SubStrId[row_idx].**
+
+For matching with multiple regex definitions there should be an array of SubStrId advice columns and SubStrIdSum (row-wise sum of the array of SubStrId advice columns). Then **MaskedCharacters[row_idx] should be equal to CharactersInput[row_idx]*SubStrIdSum[row_idx]**
+
 ### Requirements
 
 - rustc 1.68.0-nightly (0468a00ae 2022-12-17)
-- • cargo 1.68.0-nightly (cc0a32087 2022-12-14)
+- cargo 1.68.0-nightly (cc0a32087 2022-12-14)
 
 ### Build
 
@@ -26,8 +45,8 @@ cargo test --release test_substr_fail1
 cargo run --example regex
 ```
 
-More tests would be added (tests for single regex matching without public character instance, multiple regex matching) 
+More tests would be added (tests for single regex matching with empty public character instance, multiple regex matching) 
 
 ### Todo
 
-There are still two unnecessary constraints(lookups) in the lib. The version that removes the constraints is under testing.
+The regex circuit implementation could be based on more regex-definition-friendly regex-dfa transformation lib like [regex-dfa](https://github.com/jneem/regex-dfa).
