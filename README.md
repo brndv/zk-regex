@@ -16,7 +16,7 @@ The regex matching(DFA processing) constraints are implemented in RegexVerifyCon
 | :--------------------- | :------------------------ | :--------------------- | :-------------------- |
 |  |  |  |  |
 
-Here is the layout of regex(all string regex and sub-string regex)  matching circuit for a single regex definition from the library (one all string regex comprised of multiple sub-string regex for simplicity). Here **MaskedCharacters[row_idx](for instance constraint or assigned from instance)should be equal to CharactersInput[row_idx] times SubStrId[row_idx].**
+Here is the layout of regex(all string regex and sub-string regex)  matching circuit for a single regex definition from the library (one all string regex comprised of multiple sub-string regex, SubStrIdSum ommitted here for simplicity). Here **MaskedCharacters[row_idx](for instance constraint or assigned from instance)should be equal to CharactersInput[row_idx] times SubStrId[row_idx].**
 
 For matching with multiple regex definitions there should be an array of SubStrId advice columns and SubStrIdSum (row-wise sum of the array of SubStrId advice columns). Then **MaskedCharacters[row_idx] should be equal to CharactersInput[row_idx] times SubStrIdSum[row_idx]**
 
