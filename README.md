@@ -3,6 +3,7 @@
 This is a library that simplifies circuit building for regex matching. It works alike [halo2-regex](https://github.com/zkemail/halo2-regex), but is different in base halo2 (implemented with [zcash/halo2](https://github.com/zcash/halo2)), a different instance-checking result and corresponding changes in circuit constraints, advice assigning.  [zk-email](https://github.com/zkemail/halo2-zk-email.git) shows how to combine [halo2-regex](https://github.com/zkemail/halo2-regex) with other circuit chips like [zk-email/dynamic-sha2](https://github.com/zkemail/halo2-dynamic-sha256.git), so this lib follows tries to return the same assigned cells information. 
 
 The vrm(Variable-regex mapping) here is almost the same as in  [halo2-regex](https://github.com/zkemail/halo2-regex) .
+The regex matching(DFA processing) constraints are implemented in RegexVerifyConfig in zk-regex/src/lib.rs, and corresponding advice assigning is within function match_substrs of RegexVerifyConfig.
 
 ### Requirements
 
