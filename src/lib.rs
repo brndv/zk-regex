@@ -44,18 +44,18 @@ pub struct RegexAssignedResult<F: FieldExt> {
 /// 2) the specified regex substrings from the input string times with corresponding subregex ids for further instance contraints
 #[derive(Debug, Clone)]
 pub struct RegexVerifyConfig<F: FieldExt> {
-    characters: Column<Advice>,
+    characters: Column<Advice>,      // characters input to match 
     masked_chars: Column<Advice>,   // value of masked_chars[idx] should be equal to characters[idx]*substr_ids_sum[idx]
-    substr_ids_sum: Column<Advice>,
-    char_enable: Column<Advice>,
-    states_array: Vec<Column<Advice>>,
-    substr_ids_array: Vec<Column<Advice>>,
-    table_array: Vec<RegexTableConfig<F>>,
-    q_first: Selector,
-    not_q_first: Selector,
-    s_all: Selector,
-    max_chars_size: usize,
-    pub regex_defs: Vec<RegexDefs>,
+    substr_ids_sum: Column<Advice>,     // row-wise sum of substr_ids_array, or substr_ids_sum[idx] = sum{substr_ids_array[col][idx]|col=0..columns_num} 
+    char_enable: Column<Advice>,             // enabled characters
+    states_array: Vec<Column<Advice>>,      // states series of DFA processing the input characters         
+    substr_ids_array: Vec<Column<Advice>>,   // character[idx] belongs to which public sub-regex of which regex definitions
+    table_array: Vec<RegexTableConfig<F>>,  // DFA transition table arrays for the array of regexes for matching
+    q_first: Selector,            // first row selector
+    not_q_first: Selector,       // selector for all rows except the first   
+    s_all: Selector,            // all rows selector
+    max_chars_size: usize,     // largest length of input characters allowed for matching  
+    pub regex_defs: Vec<RegexDefs>,   // regex definitions for matching
 }
 
 impl<F: FieldExt> RegexVerifyConfig<F> {
@@ -119,7 +119,7 @@ impl<F: FieldExt> RegexVerifyConfig<F> {
             constraints
         });
         
-        meta.create_gate("The last enabled state must be accepted state", |meta| {
+        meta.create_gate("The last enabled state must be the accepted state", |meta| {
             let not_q_frist = meta.query_selector(not_q_first);
             let cur_enable = meta.query_advice(char_enable, Rotation::cur());
             //let not_cur_enable = Expression::Constant(F::from(1)) - cur_enable.clone();
