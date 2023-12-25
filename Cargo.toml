@@ -57,6 +57,6 @@ test = false
 bench = false
 
 [lib]
-name = "halo2_regex"
+name = "zk_regex"
 path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]

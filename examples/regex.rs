@@ -16,7 +16,7 @@ use rand_core::OsRng;
 
 
 
-use halo2_regex::{
+use zk_regex::{
     defs::{AllstrRegexDef, RegexDefs, SubstrRegexDef},
     RegexVerifyConfig,
     vrm::DecomposedRegexConfig,

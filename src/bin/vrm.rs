@@ -5,7 +5,7 @@ use std::{
 
 use clap::{Parser, Subcommand};
 #[cfg(feature = "vrm")]
-use halo2_regex::vrm::*;
+use zk_regex::vrm::*;
 use itertools::Itertools;
 
 #[cfg(feature = "vrm")]
