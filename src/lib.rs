@@ -18,14 +18,6 @@ use halo2_proofs::{
     arithmetic::FieldExt,
 };
 
-use log::info;
-use std::{
-    collections::HashSet,
-    fmt::format,
-    fs::File,
-    io::{BufRead, BufReader},
-    marker::PhantomData,
-};
 #[cfg(feature = "vrm")]
 use vrm::DecomposedRegexConfig;
 
@@ -42,45 +34,32 @@ pub struct RegexAssignedResult<F: FieldExt> {
     /// The length is equal to `max_chars_size`.    
     pub masked_substr_ids: Vec<AssignedCell<F, F>>,
     /// The assigned masked characters
+    /// masked_characters[idx] should be equal to allcharacters[idx]*masked_substr_ids[idx]
     pub masked_characters: Vec<AssignedCell<F,F>>,
     
 }
 
-/// Configuration to 1) verify that the input string satisfies the specified regexes and 2) extracts the specified substrings from the input string.
+/// Configuration to 
+/// 1) verify that the input string satisfies the specified regexes 
+/// 2) the specified regex substrings from the input string times with corresponding subregex ids for further instance contraints
 #[derive(Debug, Clone)]
 pub struct RegexVerifyConfig<F: FieldExt> {
     characters: Column<Advice>,
-    masked_chars: Column<Advice>,   // value of row idx should be equal to characters[idx]*substr_ids_sum[idx]
+    masked_chars: Column<Advice>,   // value of masked_chars[idx] should be equal to characters[idx]*substr_ids_sum[idx]
     substr_ids_sum: Column<Advice>,
     char_enable: Column<Advice>,
     states_array: Vec<Column<Advice>>,
     substr_ids_array: Vec<Column<Advice>>,
-    // is_start_array: Vec<Column<Advice>>,
-    // is_end_array: Vec<Column<Advice>>,
-    start_enable_array: Vec<Column<Advice>>,
-    end_enable_array: Vec<Column<Advice>>,
     table_array: Vec<RegexTableConfig<F>>,
     q_first: Selector,
     not_q_first: Selector,
     s_all: Selector,
-    //s_masked_chars: Selector,
-    //s_substr_ids_sum: Selector,
     max_chars_size: usize,
-    /// A vector of regex definitions applied to the input string.
     pub regex_defs: Vec<RegexDefs>,
-    //instance_masked_chars: Column<Instance>,
-    //instance_substr_id: Column<Instance>,
 }
 
 impl<F: FieldExt> RegexVerifyConfig<F> {
     /// Configure a new [`RegexVerifyConfig`].
-    ///
-    /// # Arguments
-    /// * `meta` - a constrain system in which contraints are defined.
-    /// * `max_chars_size` - the maximum length of the input string.
-    /// * `gate` - a configuration for [`FlexGateConfig`].
-    /// * `regex_defs` - a vector of regex definitions applied to the input string.
-    ///
     /// # Return values
     /// Return a new [`RegexVerifyConfig`].
     pub fn configure(
@@ -104,7 +83,6 @@ impl<F: FieldExt> RegexVerifyConfig<F> {
             })
             .collect::<Vec<Column<Advice>>>();
         
-        //let instance_substr_id = meta.instance_column();
         let substr_ids_array = (0..num_regex_def)
             .map(|_| {
                 let column = meta.advice_column();
@@ -112,26 +90,10 @@ impl<F: FieldExt> RegexVerifyConfig<F> {
                 column
             })
             .collect::<Vec<Column<Advice>>>();
-        // let is_start_array = (0..num_regex_def)
-        let start_enable_array = (0..num_regex_def)
-            .map(|_| {
-                let column = meta.advice_column();
-                meta.enable_equality(column);
-                column
-            })
-            .collect::<Vec<Column<Advice>>>();
-        // let is_end_array = (0..num_regex_def)
-        let end_enable_array = (0..num_regex_def)
-            .map(|_| {
-                let column = meta.advice_column();
-                meta.enable_equality(column);
-                column
-            })
-            .collect::<Vec<Column<Advice>>>();
+        
         let q_first = meta.complex_selector();
         let not_q_first = meta.complex_selector();
-        //let s_masked_chars = meta.complex_selector();
-        //let s_substr_ids_sum = meta.complex_selector();
+        
         let s_all = meta.complex_selector();
         let table_array = (0..num_regex_def)
             .map(|_| RegexTableConfig::configure(meta))
@@ -237,75 +199,19 @@ impl<F: FieldExt> RegexVerifyConfig<F> {
                     (enable.clone() * substr_id, table_array[idx].substr_ids),
                 ]
             });
-            //lookup start_state of substring
-            meta.lookup( |meta| {
-                // let enable = meta.query_advice(char_enable, Rotation::cur());
-                let states = states_array[idx];
-                let substr_ids = substr_ids_array[idx];
-                let start_enable = start_enable_array[idx];
-                let cur_state = meta.query_advice(states, Rotation::cur());
-                let substr_id = meta.query_advice(substr_ids, Rotation::cur());
-                let start_enable = meta.query_advice(start_enable, Rotation::cur());
-                let dummy_state_val =
-                    Expression::Constant(F::from(defs.allstr.largest_state_val + 1));
-                let disable = Expression::Constant(F::from(1)) - start_enable.clone();
-                vec![
-                    (
-                        start_enable.clone() * substr_id,
-                        table_array[idx].endpoints_substr_ids,
-                    ),
-                    (
-                        start_enable * cur_state + disable * dummy_state_val.clone(),
-                        table_array[idx].start_states,
-                    ),
-                    (dummy_state_val, table_array[idx].end_states),
-                ]
-            });
-            //lookup end_state of substring
-            meta.lookup(|meta| {
-                // let enable = meta.query_advice(char_enable, Rotation::cur());
-                let states = states_array[idx];
-                let substr_ids = substr_ids_array[idx];
-                // let is_ends = is_end_array[idx];
-                let end_enable = end_enable_array[idx];
-                let next_state = meta.query_advice(states, Rotation::next());
-                let substr_id = meta.query_advice(substr_ids, Rotation::cur());
-                let end_enable = meta.query_advice(end_enable, Rotation::cur());
-                let dummy_state_val =
-                    Expression::Constant(F::from(defs.allstr.largest_state_val + 1));
-                // let flag = enable * next_is_end;
-                let disable = Expression::Constant(F::from(1)) - end_enable.clone();
-                vec![
-                    (
-                        end_enable.clone() * substr_id,
-                        table_array[idx].endpoints_substr_ids,
-                    ),
-                    (dummy_state_val.clone(), table_array[idx].start_states),
-                    (
-                        end_enable * next_state + disable * dummy_state_val,
-                        table_array[idx].end_states,
-                    ),
-                ]
-            });
         }
 
         Self {
             characters,
             masked_chars,
-            //instance_masked_chars,
             substr_ids_sum,
-            //instance_substr_id,
             char_enable,
             states_array,
             substr_ids_array,
-            start_enable_array,
-            end_enable_array,
             table_array,
             q_first,
             not_q_first,
             s_all,
-            //s_masked_chars,
-            //s_substr_ids_sum,
             max_chars_size,
             regex_defs,
         }
@@ -313,12 +219,8 @@ impl<F: FieldExt> RegexVerifyConfig<F> {
 
     /// Verify that the input string `characters` satisfies each regex of [`AllstrRegexDef`] in `regex_defs` and extracts its strings that match any of [`SubstrRegexDef`] in `regex_defs`.
     ///
-    /// # Arguments
-    /// * `ctx` - a region context.
-    /// * `characters` - bytes of the input string.
-    ///
     /// # Return values
-    /// Return the assigned values as [`AssignedRegexResult`].
+    /// Return the assigned values as [`RegexAssignedResult`].
     pub fn match_substrs<'v: 'a, 'a>(
         &self,
         mut layouter: impl Layouter<F>,
@@ -336,7 +238,6 @@ impl<F: FieldExt> RegexVerifyConfig<F> {
                                                 }
                                                 sum
                                             }).collect::<Vec<usize>>();
-        let (is_starts, is_ends) = self.derive_is_start_end(&states, &substr_ids);
         let mut enable_values = vec![];
         let mut character_values = vec![];
         for char in characters.iter() {
@@ -418,28 +319,16 @@ impl<F: FieldExt> RegexVerifyConfig<F> {
                                 .iter()
                                 .map(|substr_id| Value::known(F::from(*substr_id as u64)))
                                 .collect::<Vec<Value<F>>>();
-                            let mut is_start_values = is_starts[d_idx][0..characters.len()]
-                                .iter()
-                                .map(|flag| Value::known(F::from(*flag)))
-                                .collect::<Vec<Value<F>>>();
-                            let mut is_end_values = is_ends[d_idx][0..characters.len()]
-                                .iter()
-                                .map(|flag| Value::known(F::from(*flag)))
-                                .collect::<Vec<Value<F>>>();
+                        
                             for idx in characters.len()..self.max_chars_size {
                                 substr_id_values.push(Value::known(F::from(0)));
-                                let (state_val, is_start, is_end) = if idx == characters.len() {
-                                    (
-                                        states[d_idx][idx],
-                                        is_starts[d_idx][idx],
-                                        is_ends[d_idx][idx],
-                                    )
+                                let state_val = if idx == characters.len() {
+                                    states[d_idx][idx]
                                 } else {
-                                    (defs.allstr.largest_state_val + 1, false, false)
+                                    defs.allstr.largest_state_val + 1
                                 };
                                 state_values.push(Value::known(F::from(state_val)));
-                                is_start_values.push(Value::known(F::from(is_start)));
-                                is_end_values.push(Value::known(F::from(is_end)));
+                                
                             }
                             for (s_idx, state) in state_values.into_iter().enumerate() {
                                 region.assign_advice(
@@ -449,7 +338,6 @@ impl<F: FieldExt> RegexVerifyConfig<F> {
                                     || state,
                                 )?;
                             }
-                            
                             for (s_idx, substr_id) in substr_id_values.into_iter().enumerate() {
                                 region.assign_advice(
                                     || format!("substr_id at {} of def {}", s_idx, d_idx),
@@ -458,27 +346,9 @@ impl<F: FieldExt> RegexVerifyConfig<F> {
                                     || substr_id,
                                 )?;
                             }
-                            for (idx, is_start) in is_start_values.into_iter().enumerate() {
-                                region.assign_advice(
-                                    || format!("is_start at {} of def {}", idx, d_idx),
-                                    self.start_enable_array[d_idx],
-                                    idx,
-                                    || is_start*enable_values[idx]//start_enable.value().map(|v| *v),
-                                )?;
-                            }
-                
-                            for idx in 0..is_end_values.len() - 1 {
-                                region.assign_advice(
-                                    || format!("is_end at {} of def {}", idx, d_idx),
-                                    self.end_enable_array[d_idx],
-                                    idx,
-                                    || is_end_values[idx + 1]*enable_values[idx],//end_enable.value().map(|v| *v),
-                                )?;
-                            }
+                            
 
                         }
-                    
-
                     let result = RegexAssignedResult {
                         all_characters: assigned_characters,
                         all_enable_flags: assigned_enables,
@@ -491,23 +361,6 @@ impl<F: FieldExt> RegexVerifyConfig<F> {
 
     }
 
-    /*pub fn expose_public(
-        &self,
-        mut layouter: impl Layouter<F>,
-        assigned_masked_chars: &Vec<AssignedCell<F, F>>,
-        assigned_substr_ids: &Vec<AssignedCell<F,F>>,
-    ) {
-        for idx in 0..self.max_chars_size{
-            layouter.namespace(|| format!("masked char instance at {}",idx))
-                        .constrain_instance(assigned_masked_chars[idx].cell(), self.instance_masked_chars, idx)
-                        .unwrap_err();
-            layouter.namespace(|| format!("substr id instance at {}",idx))
-                        .constrain_instance(assigned_substr_ids[idx].cell(),self.instance_substr_id, idx)
-                        .unwrap_err();
-        }
-        
-    }*/
-
     /// Load looup tables of each [`RegexDefs`] in `regex_defs`.
     ///
     /// # Arguments
@@ -519,7 +372,6 @@ impl<F: FieldExt> RegexVerifyConfig<F> {
         }
         Ok(())
     }
-
 
     pub(crate) fn derive_states(&self, characters: &[u8]) -> Vec<Vec<u64>> {
         let mut states = vec![];
@@ -560,49 +412,7 @@ impl<F: FieldExt> RegexVerifyConfig<F> {
         }
         substr_ids
     }
-
-    pub(crate) fn derive_is_start_end(
-        &self,
-        states: &[Vec<u64>],
-        substr_ids: &[Vec<usize>],
-    ) -> (Vec<Vec<bool>>, Vec<Vec<bool>>) {
-        let mut is_starts_array = vec![];
-        let mut is_ends_array = vec![];
-        let mut substr_id_offset = 1usize;
-        for (d_idx, defs) in self.regex_defs.iter().enumerate() {
-            let state_len = states[d_idx].len();
-            let mut is_starts = states[d_idx][0..state_len - 1]
-                .iter()
-                .zip(substr_ids[d_idx].iter())
-                .map(|(state, substr_id)| {
-                    if *substr_id == 0 {
-                        return false;
-                    }
-                    let substr_idx = *substr_id - substr_id_offset;
-                    let valid_start_states = &defs.substrs[substr_idx].start_states;
-                    valid_start_states.contains(state)
-                })
-                .collect::<Vec<bool>>();
-            is_starts.push(false);
-            let is_ends = states[d_idx][1..]
-                .iter()
-                .zip(substr_ids[d_idx].iter())
-                .map(|(state, substr_id)| {
-                    if *substr_id == 0 {
-                        return false;
-                    }
-                    let substr_idx: usize = *substr_id - substr_id_offset;
-                    let valid_end_states = &defs.substrs[substr_idx].end_states;
-                    valid_end_states.contains(state)
-                })
-                .collect::<Vec<bool>>();
-            let is_ends = vec![&vec![false][..], &is_ends].concat();
-            is_starts_array.push(is_starts);
-            is_ends_array.push(is_ends);
-            substr_id_offset += defs.substrs.len();
-        }
-        (is_starts_array, is_ends_array)
-    }
+    
 }
 
 #[cfg(feature = "vrm")]
@@ -627,8 +437,7 @@ mod test {
     //use halo2_proofs::poly::kzg::multiopen::{ProverGWC, VerifierGWC};
     use rand_core::OsRng;
     use std::marker::PhantomData;
-    use std::{collections::HashSet, path::Path};
-
+    use std::{collections::HashSet, path::Path,fs::File};
     use super::*;
 
     use itertools::Itertools;
@@ -648,7 +457,6 @@ mod test {
 
     #[derive(Default, Clone, Debug)]
     struct TestCircuit1<F: FieldExt> {
-        // Since this is only relevant for the witness, we can opt to make this whatever convenient type we want
         characters: Vec<u8>,
         _marker: PhantomData<F>,
     }
@@ -742,10 +550,6 @@ mod test {
             .chars()
             .map(|c| c as u8)
             .collect();
-        // Make a vector of the numbers 1...24
-        // let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
-        // assert_eq!(characters.len(), STRING_LEN);
-        // assert_eq!(states.len(), STRING_LEN);
 
         // Successful cases
         let circuit = TestCircuit1::<Fp> {
@@ -770,12 +574,7 @@ mod test {
         // 1. The string does not satisfy the regex.
         let characters: Vec<u8> = "email was meant for @@".chars().map(|c| c as u8).collect();
 
-        // Make a vector of the numbers 1...24
-        // let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
-        // assert_eq!(characters.len(), STRING_LEN);
-        // assert_eq!(states.len(), STRING_LEN);
-
-        // Successful cases
+        // failure cases
         let circuit = TestCircuit1::<Fp> {
             characters,
             _marker: PhantomData,
