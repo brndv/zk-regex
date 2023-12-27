@@ -6,9 +6,9 @@ use std::{
 use halo2_proofs::{
     arithmetic::FieldExt, 
     dev::MockProver,
-    circuit::{Layouter, Chip, Value, AssignedCell, Region, SimpleFloorPlanner}, 
-    plonk::{Column, Advice, Instance, Error, Selector, ConstraintSystem, Circuit, Expression, create_proof, keygen_vk, keygen_pk, ProvingKey, VerifyingKey, verify_proof, SingleVerifier}, 
-    poly::{Rotation, commitment::Params}, 
+    circuit::{Layouter, SimpleFloorPlanner}, 
+    plonk::{Column, Instance, Error, ConstraintSystem, Circuit, create_proof, keygen_vk, keygen_pk, ProvingKey, VerifyingKey, verify_proof, SingleVerifier}, 
+    poly::commitment::Params, 
     pasta::{Fp, EqAffine}, transcript::{Blake2bWrite, Challenge255, Blake2bRead}, 
 };
 use rand_core::OsRng;
@@ -49,10 +49,6 @@ pub struct RegexCircuit<F: FieldExt> {
 }
 
 impl<F: FieldExt> RegexCircuit<F> {
-    /// The number of advice columns in [`FlexGateConfig`].
-    const NUM_ADVICE: usize = 2;
-    /// The number of fix columns in [`FlexGateConfig`].
-    const NUM_FIXED: usize = 1;
     /// Path to save all string regex DFA transition table
     const ALLSTR_PATH: &str = "./examples/ex_allstr.txt";
 }
