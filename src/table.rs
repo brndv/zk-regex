@@ -1,16 +1,10 @@
-use std::{collections::HashMap, fmt::format, marker::PhantomData};
-
+use std::marker::PhantomData;
 use halo2_proofs::{
     circuit::{Layouter, Value},
     plonk::{ConstraintSystem, Error, TableColumn},
     arithmetic::FieldExt,
 };
-
-use std::fs::File;
-use std::io::{BufRead, BufReader};
-
-use crate::defs::{AllstrRegexDef, RegexDefs, SubstrRegexDef};
-use crate::RegexVerifyConfig;
+use crate::defs::RegexDefs;
 
 /// Lookup tables used in [`RegexVerifyConfig`].
 #[derive(Debug, Clone)]
@@ -107,7 +101,7 @@ impl<F: FieldExt> RegexTableConfig<F> {
                     .iter()
                     .collect::<Vec<(&(u8, u64), &(usize, u64))>>();
                 lookups.sort_by(|a, b| a.1 .0.cmp(&b.1 .0));
-                for ((char, cur_state), (idx, next_state)) in lookups.into_iter() {
+                for ((char, cur_state), (_idx, next_state)) in lookups.into_iter() {
                     let mut substr_id = 0;
                     for (j, substr_def) in regex_defs.substrs.iter().enumerate() {
                         if substr_def

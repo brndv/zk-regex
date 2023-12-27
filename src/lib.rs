@@ -9,10 +9,10 @@ use crate::table::RegexTableConfig;
 use crate::{AllstrRegexDef, RegexDefs, SubstrRegexDef};
 pub use defs::*;
 use halo2_proofs::{
-    circuit::{AssignedCell, Layouter, Region, SimpleFloorPlanner, Value},
+    circuit::{AssignedCell, Layouter, Value},
     plonk::{
-        Advice, Assigned, Circuit, Column, ConstraintSystem, Constraints, Error, Expression,
-        Instance, Selector, TableColumn,
+        Advice, Column, ConstraintSystem, Error, Expression,
+        Selector, 
     },
     poly::Rotation,
     arithmetic::FieldExt,
@@ -129,7 +129,7 @@ impl<F: FieldExt> RegexVerifyConfig<F> {
                 let cur_state = meta.query_advice(*states, Rotation::cur());
                 constraints.push(
                     not_q_frist.clone()
-                        * ( prev_enable.clone() - cur_enable.clone() )
+                        * ( prev_enable.clone() - cur_enable.clone() )   // enable change
                         * ( cur_state
                             - Expression::Constant(F::from(regex_defs[idx].allstr.accepted_state_val))),
                 );
@@ -221,7 +221,7 @@ impl<F: FieldExt> RegexVerifyConfig<F> {
     ///
     /// # Return values
     /// Return the assigned values as [`RegexAssignedResult`].
-    pub fn match_substrs<'v: 'a, 'a>(
+    pub fn match_substrs(
         &self,
         mut layouter: impl Layouter<F>,
         characters: &[u8],
@@ -421,128 +421,119 @@ mod test {
     use halo2_proofs::{
         arithmetic::FieldExt, 
         dev::MockProver,
-        circuit::{Layouter, Chip, Value, AssignedCell, Region, SimpleFloorPlanner}, 
-        plonk::{Column, Advice, Instance, Error, Selector, ConstraintSystem, Circuit, Expression, create_proof, keygen_vk, keygen_pk, ProvingKey, VerifyingKey, verify_proof, SingleVerifier}, 
-        poly::{Rotation, commitment::Params}, 
-        pasta::{Fp, EqAffine}, transcript::{Blake2bWrite, Challenge255, Blake2bRead}, 
+        circuit::{Layouter, SimpleFloorPlanner}, 
+        plonk::{Column, Instance, Error, ConstraintSystem, Circuit},  
+        pasta::Fp,
     };
     
-
     use super::*;
     use crate::{
         defs::{AllstrRegexDef, SubstrRegexDef},
         vrm::DecomposedRegexConfig,
     };
 
-    //use halo2_proofs::poly::kzg::multiopen::{ProverGWC, VerifierGWC};
-    use rand_core::OsRng;
     use std::marker::PhantomData;
-    use std::{collections::HashSet, path::Path,fs::File};
-    use super::*;
-
-    use itertools::Itertools;
+    use std::{path::Path,fs::File};
 
     // Checks a regex of string len
     const MAX_STRING_LEN: usize = 128;
-    const K: usize = 17;
+    const K: usize = 12;
+
+    #[macro_export]
+    macro_rules! impl_regex_circuit{
+        ($config_name: ident, $circuit_name: ident, $regex_defs: expr, $max_str_len: expr) =>{
+            #[derive(Clone, Debug)]
+            pub struct $config_name<F: FieldExt> {
+                inner: RegexVerifyConfig<F>,
+                // Masked Characters Instance
+                masked_str_instance: Column<Instance>,
+                // Substrid Instance
+                substr_ids_instance: Column<Instance>,
+            }
+
+            #[derive(Default, Clone, Debug)]
+            struct $circuit_name<F: FieldExt> {
+                characters: Vec<u8>,
+                _marker: PhantomData<F>,
+            }
+
+            impl<F: FieldExt> Circuit<F> for $circuit_name<F> {
+                type Config = $config_name<F>;
+                type FloorPlanner = SimpleFloorPlanner;
+
+                // Circuit without witnesses, called only during key generation
+                fn without_witnesses(&self) -> Self {
+                    Self {
+                        characters: vec![],
+                        _marker: PhantomData,
+                    }
+                }
+
+                fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
+                    let regex_defs = $regex_defs;
+                    let inner = RegexVerifyConfig::configure(meta, $max_str_len, regex_defs);
+                    let masked_str_instance = meta.instance_column();
+                    let substr_ids_instance = meta.instance_column();
+                    meta.enable_equality(masked_str_instance);
+                    meta.enable_equality(substr_ids_instance);
+                    Self::Config{
+                        inner,
+                        masked_str_instance,
+                        substr_ids_instance,
+                    }
+                }
+
+                fn synthesize(
+                    &self,
+                    config: Self::Config,
+                    mut layouter: impl Layouter<F>,
+                ) -> Result<(), Error> {
+
+                    config.inner.load(&mut layouter)?;
+                    
+                    let result = config.inner.match_substrs(layouter.namespace(|| "match regex substr"), &self.characters).unwrap();
+                    
+                    for idx in 0..MAX_STRING_LEN {
+                        layouter.namespace(|| format!("masked str instance at {:}",idx))
+                            .constrain_instance(result.masked_characters[idx].cell(), config.masked_str_instance, idx)?;
+                        layouter.namespace(|| format!("substr ids instance at {:}",idx))
+                            .constrain_instance(result.masked_substr_ids[idx].cell(), config.substr_ids_instance, idx)?;  
+                    }
+                    
+                    Ok(())
+                }
+            }
+
+        }
+    }
     
-    #[derive(Clone, Debug)]
-    pub struct TestConfig<F: FieldExt> {
-        inner: RegexVerifyConfig<F>,
-        // Masked Characters Instance
-        masked_str_instance: Column<Instance>,
-        // Substrid Instance
-        substr_ids_instance: Column<Instance>,
-    }
-
-    #[derive(Default, Clone, Debug)]
-    struct TestCircuit1<F: FieldExt> {
-        characters: Vec<u8>,
-        _marker: PhantomData<F>,
-    }
-
-    impl<F: FieldExt> Circuit<F> for TestCircuit1<F> {
-        type Config = TestConfig<F>;
-        type FloorPlanner = SimpleFloorPlanner;
-
-        // Circuit without witnesses, called only during key generation
-        fn without_witnesses(&self) -> Self {
-            Self {
-                characters: vec![],
-                _marker: PhantomData,
+    impl_regex_circuit!(
+        TestConfig1,
+        TestCircuit1,
+        vec![
+            RegexDefs{
+                allstr: AllstrRegexDef::read_from_text("./test_regexes/regex1_test_lookup.txt"),
+                substrs: vec![SubstrRegexDef::read_from_text("./test_regexes/substr1_test_lookup.txt")],
+            },
+            RegexDefs{
+                allstr: AllstrRegexDef::read_from_text("./test_regexes/regex2_test_lookup.txt"),
+                substrs: vec![SubstrRegexDef::read_from_text("./test_regexes/substr2_test_lookup.txt")],
             }
-        }
+        ],
+        128
+    );
 
-        fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-            let all_regex_def1 =
-                AllstrRegexDef::read_from_text("./test_regexes/regex1_test_lookup.txt");
-            let substr_def1 =
-                SubstrRegexDef::read_from_text("./test_regexes/substr1_test_lookup.txt");
-            let all_regex_def2 =
-                AllstrRegexDef::read_from_text("./test_regexes/regex2_test_lookup.txt");
-            let substr_def2 =
-                SubstrRegexDef::read_from_text("./test_regexes/substr2_test_lookup.txt");
-            
-            let regex_defs = vec![
-                RegexDefs {
-                    allstr: all_regex_def1,
-                    substrs: vec![substr_def1],
-                },
-                RegexDefs {
-                    allstr: all_regex_def2,
-                    substrs: vec![substr_def2],
-                },
-            ];
-            let inner = RegexVerifyConfig::configure(meta, MAX_STRING_LEN, regex_defs);
-            let masked_str_instance = meta.instance_column();
-            let substr_ids_instance = meta.instance_column();
-            meta.enable_equality(masked_str_instance);
-            meta.enable_equality(substr_ids_instance);
-            Self::Config{
-                inner,
-                masked_str_instance,
-                substr_ids_instance,
+    impl_regex_circuit!(
+        TestConfig2,
+        TestCircuit2,
+        vec![
+            RegexDefs{
+                allstr: AllstrRegexDef::read_from_text("./test_regexes/regex4_test_lookup.txt"),
+                substrs: vec![],
             }
-        }
-
-        fn synthesize(
-            &self,
-            config: Self::Config,
-            mut layouter: impl Layouter<F>,
-        ) -> Result<(), Error> {
-            let regex1_decomposed: DecomposedRegexConfig =
-                serde_json::from_reader(File::open("./test_regexes/regex1_test.json").unwrap())
-                    .unwrap();
-            regex1_decomposed
-                .gen_regex_files(
-                    &Path::new("./test_regexes/regex1_test_lookup.txt").to_path_buf(),
-                    &[Path::new("./test_regexes/substr1_test_lookup.txt").to_path_buf()],
-                )
-                .unwrap();
-            let regex2_decomposed: DecomposedRegexConfig =
-                serde_json::from_reader(File::open("./test_regexes/regex2_test.json").unwrap())
-                    .unwrap();
-            regex2_decomposed
-                .gen_regex_files(
-                    &Path::new("./test_regexes/regex2_test_lookup.txt").to_path_buf(),
-                    &[Path::new("./test_regexes/substr2_test_lookup.txt").to_path_buf()],
-                )
-                .unwrap();
-
-            config.inner.load(&mut layouter)?;
-            
-            let result = config.inner.match_substrs(layouter.namespace(|| "match regex substr"), &self.characters).unwrap();
-            
-            for idx in 0..MAX_STRING_LEN {
-                layouter.namespace(|| format!("masked str instance at {:}",idx))
-                    .constrain_instance(result.masked_characters[idx].cell(), config.masked_str_instance, idx)?;
-                layouter.namespace(|| format!("substr ids instance at {:}",idx))
-                    .constrain_instance(result.masked_substr_ids[idx].cell(), config.substr_ids_instance, idx)?;  
-            }
-            
-            Ok(())
-        }
-    }
+        ],
+        128
+    );
 
     #[test]
     fn test_substr_pass1() {
@@ -596,6 +587,41 @@ mod test {
             }
             _ => assert!(false, "Should be error."),
         }
+    }
+
+    #[test]
+    fn test_single_regex_match_pass(){
+        let regex1_decomposed: DecomposedRegexConfig =
+                serde_json::from_reader(File::open("./test_regexes/regex4_test.json").unwrap())
+                    .unwrap();
+        regex1_decomposed
+            .gen_regex_files(
+                &Path::new("./test_regexes/regex4_test_lookup.txt").to_path_buf(),
+                &[],
+            )
+            .unwrap();
+
+        let characters: Vec<u8> = "abcca32@ab.xyz aca3ca@bc.com"
+            .chars()
+            .map(|c| c as u8)
+            .collect();
+
+        // Successful cases
+        let circuit = TestCircuit2::<Fp> {
+            characters,
+            _marker: PhantomData,
+        };
+        let correct_substrs : Vec<(usize,String)> = vec![];
+        let mut expected_masked_chars = vec![Fp::from(0);MAX_STRING_LEN];
+        let mut expected_substr_ids = vec![Fp::from(0);MAX_STRING_LEN];
+        for (substr_idx, (start, chars)) in correct_substrs.iter().enumerate() {
+            for (idx, char) in chars.as_bytes().iter().enumerate() {
+                expected_substr_ids[start + idx] = Fp::from((substr_idx + 1) as u64);
+                expected_masked_chars[start + idx] = Fp::from(*char as u64)*Fp::from((substr_idx + 1) as u64);
+            }
+        }
+        let prover = MockProver::run(K as u32, &circuit, vec![expected_masked_chars,expected_substr_ids]).unwrap();
+        assert_eq!(prover.verify(), Ok(()));
     }
     
 }

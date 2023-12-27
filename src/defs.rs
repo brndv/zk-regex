@@ -1,14 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::format,
-    marker::PhantomData,
-};
-
-use halo2_proofs::{
-    circuit::{Layouter, Value},
-    plonk::{ConstraintSystem, Error, TableColumn},
-};
-
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 

@@ -1,0 +1,10 @@
+{
+    "max_byte_size": 128,
+    "parts": [
+        {
+            "is_public": false,
+            "regex_def": "((a|b|c)+(1|2|3|a|b|c)*@(a|b|c)+\\.((com)|(xyz)|(dev))( )+)+(a|b|c)+(1|2|3|a|b|c)*@(a|b|c)+\\.((com)|(xyz)|(dev))",
+            "max_size": 128
+        }
+    ]
+}
