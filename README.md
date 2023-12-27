@@ -39,10 +39,11 @@ cargo build --release
 cd zk-regex
 cargo test --release test_substr_pass1
 cargo test --release test_substr_fail1
+cargo test --release test_single_regex_match_pass
 cargo run --example regex
 ```
 
-More tests would be added (tests for single regex matching with empty public character instance, multiple regex matching) 
+
 
 ### Todo
 
